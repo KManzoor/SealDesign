@@ -20,6 +20,8 @@ interface MasterCrudTableProps<T> {
   onDelete: (item: T) => Promise<void> | void;
   resetLabel?: string;
   submitLabel?: string;
+  successMessage?: string;
+  errorMessage?: string;
 }
 
 export default function MasterCrudTable<T>({
@@ -35,11 +37,15 @@ export default function MasterCrudTable<T>({
   onDelete,
   resetLabel = 'Clear',
   submitLabel = 'Save',
+  successMessage,
+  errorMessage,
 }: MasterCrudTableProps<T>) {
   return (
     <div className="page-card">
       <h2>{title}</h2>
       <p className="muted">{description}</p>
+      {successMessage ? <div className="banner info">{successMessage}</div> : null}
+      {errorMessage ? <div className="banner error">{errorMessage}</div> : null}
 
       <div className="form-card" style={{ marginBottom: '16px' }}>
         <div className="form-grid">
@@ -87,7 +93,16 @@ export default function MasterCrudTable<T>({
                 <td>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     <button className="secondary-btn" onClick={() => onEdit(item)}>Edit</button>
-                    <button className="primary-btn" onClick={() => void onDelete(item)}>Delete</button>
+                    <button
+                      className="primary-btn"
+                      onClick={() => {
+                        if (window.confirm(`Delete this record from ${title}? This cannot be undone.`)) {
+                          void onDelete(item);
+                        }
+                      }}
+                    >
+                      Delete
+                    </button>
                   </div>
                 </td>
               </tr>

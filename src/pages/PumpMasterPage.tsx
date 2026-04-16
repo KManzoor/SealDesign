@@ -9,6 +9,7 @@ export default function PumpMasterPage() {
   const [items, setItems] = useState<PumpOption[]>([]);
   const [formData, setFormData] = useState<Record<string, string>>(initialForm);
   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
   async function load() {
     const data = await listPumpOptions();
@@ -20,7 +21,12 @@ export default function PumpMasterPage() {
   }, []);
 
   async function handleSubmit() {
-    if (!formData.make.trim() || !formData.model.trim()) return;
+    setError('');
+    setMessage('');
+    if (!formData.make.trim() || !formData.model.trim() || !formData.pumpCode.trim()) {
+      setError('Pump Make, Pump Model, and Pump Model Code are required.');
+      return;
+    }
     await upsertPumpOption({ make: formData.make.trim(), model: formData.model.trim(), pumpCode: formData.pumpCode.trim() });
     setMessage('Pump mapping saved successfully.');
     setFormData(initialForm);
@@ -39,6 +45,8 @@ export default function PumpMasterPage() {
       <MasterCrudTable
         title="Pump Model Master"
         description="Manage pump make, pump model, and generated pump model codes."
+        successMessage={message}
+        errorMessage={error}
         fields={[
           { name: 'make', label: 'Pump Make' },
           { name: 'model', label: 'Pump Model' },

@@ -42,6 +42,7 @@ export default function GpClassificationPage() {
       <MasterCrudTable
         title="GP Classification Master"
         description="Maintain the output patterns used to decide the final attribute format."
+        successMessage={message}
         fields={[
           { name: 'attribute_type', label: 'Attribute Type' },
           { name: 'output_pattern', label: 'Output Pattern' },

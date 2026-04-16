@@ -16,6 +16,9 @@ export default function ConfigurationsPage() {
   }, []);
 
   async function handleDelete(id: string) {
+    if (!window.confirm('Delete this saved configuration? This cannot be undone.')) {
+      return;
+    }
     await deleteConfiguration(id);
     setMessage('Configuration deleted successfully.');
     await load();

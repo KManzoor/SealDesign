@@ -9,6 +9,7 @@ export default function MocMasterPage() {
   const [items, setItems] = useState<MocOption[]>([]);
   const [formData, setFormData] = useState<Record<string, string>>(initialForm);
   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
   async function load() {
     const data = await listMocOptions();
@@ -20,7 +21,12 @@ export default function MocMasterPage() {
   }, []);
 
   async function handleSubmit() {
-    if (!formData.code.trim()) return;
+    setError('');
+    setMessage('');
+    if (!formData.code.trim() || !formData.desc.trim()) {
+      setError('MOC Code and Description are required.');
+      return;
+    }
     await upsertMocOption({ code: formData.code.trim(), desc: formData.desc.trim() });
     setMessage('MOC saved successfully.');
     setFormData(initialForm);
@@ -39,6 +45,8 @@ export default function MocMasterPage() {
       <MasterCrudTable
         title="MOC Master"
         description="Maintain the MOC options that are used during attribute generation."
+        successMessage={message}
+        errorMessage={error}
         fields={[
           { name: 'code', label: 'MOC Code' },
           { name: 'desc', label: 'Description' },

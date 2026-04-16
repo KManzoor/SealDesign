@@ -44,6 +44,7 @@ export default function ConstructionMasterPage() {
       <MasterCrudTable
         title="Construction Master"
         description="Manage cartridge and non-cartridge rules along with their API codes."
+        successMessage={message}
         fields={[
           { name: 'construction_type', label: 'Construction Type' },
           { name: 'suffix_code', label: 'Suffix Code' },

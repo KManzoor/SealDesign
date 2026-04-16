@@ -44,6 +44,7 @@ export default function PrototypePage() {
   const [usedValues, setUsedValues] = useState('');
   const [bom, setBom] = useState<string[]>([]);
   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
   const pumpMakes = useMemo(() => [...new Set(pumpOptions.map((item) => item.make))], [pumpOptions]);
   const stationaries = useMemo(() => toStationaryMap(stationaryRows), [stationaryRows]);
@@ -135,7 +136,12 @@ export default function PrototypePage() {
   }, [attributeType, sealType, sealSize, construction, stationary, apiPlan, pumpMake, pumpModel, mocCode, glandTypeCode, pumpCode, bomItems]);
 
   async function handleSave() {
-    if (!resultCode) return;
+    setError('');
+    setMessage('');
+    if (!attributeType || !sealType || !sealSize.trim() || !construction || !stationary || !apiPlan || !pumpMake || !pumpModel || !pumpCode || !mocCode || !resultCode) {
+      setError('Please fill all required fields used for final code generation before saving.');
+      return;
+    }
     const configurationNo = `CFG-${Date.now()}`;
     await createConfiguration({
       id: crypto.randomUUID(),
@@ -162,6 +168,7 @@ export default function PrototypePage() {
       <h2>Last Screen Prototype</h2>
       <p className="muted">This page now loads its master values dynamically and can save generated configurations.</p>
       {message ? <div className="banner info">{message}</div> : null}
+      {error ? <div className="banner error">{error}</div> : null}
 
       <div className="form-card">
         <div className="form-grid">

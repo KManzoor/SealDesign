@@ -18,6 +18,7 @@ export default function StationaryMasterPage() {
   const [items, setItems] = useState<StationaryMasterRow[]>([]);
   const [formData, setFormData] = useState<Record<string, string>>(initialForm);
   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
   async function load() {
     const data = await listStationaryRules();
@@ -29,7 +30,12 @@ export default function StationaryMasterPage() {
   }, []);
 
   async function handleSubmit() {
-    if (!formData.stationary_name.trim()) return;
+    setError('');
+    setMessage('');
+    if (!formData.stationary_name.trim() || !formData.default_api_plan.trim() || !formData.gland_code_0.trim() || !formData.gland_code_11.trim() || !formData.gland_code_1162.trim()) {
+      setError('Stationary Name, Default API Plan, and the main gland code fields are required.');
+      return;
+    }
     await upsertStationaryRule({
       stationary_name: formData.stationary_name.trim(),
       default_api_plan: formData.default_api_plan,
@@ -57,6 +63,8 @@ export default function StationaryMasterPage() {
       <MasterCrudTable
         title="Stationary Rule Master"
         description="Maintain the default API plan and gland code mapping used by the final generator."
+        successMessage={message}
+        errorMessage={error}
         fields={[
           { name: 'stationary_name', label: 'Stationary Name' },
           { name: 'default_api_plan', label: 'Default API Plan', type: 'select', options: ['0', '11', '11/62', '52', '53', '54'] },

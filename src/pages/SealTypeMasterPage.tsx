@@ -9,6 +9,7 @@ export default function SealTypeMasterPage() {
   const [items, setItems] = useState<SealType[]>([]);
   const [formData, setFormData] = useState<Record<string, string>>(initialForm);
   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
   async function load() {
     const data = await listSealTypes();
@@ -20,7 +21,12 @@ export default function SealTypeMasterPage() {
   }, []);
 
   async function handleSubmit() {
-    if (!formData.code.trim()) return;
+    setError('');
+    setMessage('');
+    if (!formData.code.trim() || !formData.description.trim() || !formData.balanceType.trim()) {
+      setError('Seal Type Code, Description, and Balance Type are required.');
+      return;
+    }
     await upsertSealType({ code: formData.code.trim(), description: formData.description.trim(), balanceType: formData.balanceType || 'Balance' });
     setMessage('Seal type saved successfully.');
     setFormData(initialForm);
@@ -39,6 +45,8 @@ export default function SealTypeMasterPage() {
       <MasterCrudTable
         title="Seal Type Master"
         description="Create, update, and delete real seal type records used by the prototype generator."
+        successMessage={message}
+        errorMessage={error}
         fields={[
           { name: 'code', label: 'Seal Type Code' },
           { name: 'description', label: 'Description' },
