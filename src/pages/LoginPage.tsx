@@ -40,7 +40,7 @@ export default function LoginPage() {
           </button>
         </form>
         <div className="banner info" style={{ marginTop: '14px' }}>
-          Existing users are linked to Supabase Auth automatically, or through the updated SQL seed for the demo accounts.
+          Existing username-based users are auto-linked to an internal Supabase email during sign-in.
         </div>
       </div>
     </div>

@@ -160,6 +160,157 @@ on conflict (username) do update set
   status = excluded.status,
   updated_at = now();
 
+update app_users
+set email = lower(username) || '@futureseal.local',
+    updated_at = now()
+where (email is null or btrim(email) = '')
+  and username is not null;
+
+alter table roles enable row level security;
+alter table app_users enable row level security;
+alter table user_access enable row level security;
+alter table user_activities enable row level security;
+alter table seal_configuration_txn enable row level security;
+alter table seal_type_master enable row level security;
+alter table moc_master enable row level security;
+alter table pump_model_master enable row level security;
+alter table stationary_rule_master enable row level security;
+alter table gp_classification_master enable row level security;
+alter table construction_master enable row level security;
+alter table bom_master enable row level security;
+
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'roles' and policyname = 'roles_read_authenticated') then
+    create policy roles_read_authenticated on roles for select to authenticated using (true);
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'app_users' and policyname = 'app_users_select_own') then
+    create policy app_users_select_own on app_users for select to authenticated using (
+      auth.uid() = auth_user_id or lower(coalesce(email, '')) = lower(coalesce(auth.jwt() ->> 'email', ''))
+    );
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'app_users' and policyname = 'app_users_insert_own') then
+    create policy app_users_insert_own on app_users for insert to authenticated with check (
+      auth.uid() = auth_user_id and lower(coalesce(email, '')) = lower(coalesce(auth.jwt() ->> 'email', ''))
+    );
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'app_users' and policyname = 'app_users_update_own') then
+    create policy app_users_update_own on app_users for update to authenticated using (
+      auth.uid() = auth_user_id or lower(coalesce(email, '')) = lower(coalesce(auth.jwt() ->> 'email', ''))
+    ) with check (
+      auth.uid() = auth_user_id or lower(coalesce(email, '')) = lower(coalesce(auth.jwt() ->> 'email', ''))
+    );
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'user_access' and policyname = 'user_access_read_own') then
+    create policy user_access_read_own on user_access for select to authenticated using (
+      exists (
+        select 1 from app_users ap
+        where ap.id = user_access.user_id
+          and (ap.auth_user_id = auth.uid() or lower(coalesce(ap.email, '')) = lower(coalesce(auth.jwt() ->> 'email', '')))
+      )
+    );
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'user_activities' and policyname = 'user_activities_insert_own') then
+    create policy user_activities_insert_own on user_activities for insert to authenticated with check (
+      exists (
+        select 1 from app_users ap
+        where ap.id = user_activities.user_id
+          and (ap.auth_user_id = auth.uid() or lower(coalesce(ap.email, '')) = lower(coalesce(auth.jwt() ->> 'email', '')))
+      )
+    );
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'seal_type_master' and policyname = 'seal_type_master_admin_all') then
+    create policy seal_type_master_admin_all on seal_type_master for all to authenticated using (true) with check (true);
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'moc_master' and policyname = 'moc_master_admin_all') then
+    create policy moc_master_admin_all on moc_master for all to authenticated using (true) with check (true);
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'pump_model_master' and policyname = 'pump_model_master_admin_all') then
+    create policy pump_model_master_admin_all on pump_model_master for all to authenticated using (true) with check (true);
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'stationary_rule_master' and policyname = 'stationary_rule_master_admin_all') then
+    create policy stationary_rule_master_admin_all on stationary_rule_master for all to authenticated using (true) with check (true);
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'gp_classification_master' and policyname = 'gp_classification_master_admin_all') then
+    create policy gp_classification_master_admin_all on gp_classification_master for all to authenticated using (true) with check (true);
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'construction_master' and policyname = 'construction_master_admin_all') then
+    create policy construction_master_admin_all on construction_master for all to authenticated using (true) with check (true);
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'bom_master' and policyname = 'bom_master_admin_all') then
+    create policy bom_master_admin_all on bom_master for all to authenticated using (true) with check (true);
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'seal_configuration_txn' and policyname = 'seal_configuration_txn_auth_all') then
+    create policy seal_configuration_txn_auth_all on seal_configuration_txn for all to authenticated using (true) with check (true);
+  end if;
+end $$;
+
+do $$
+declare
+  admin_role_id uuid;
+  design_role_id uuid;
+begin
+  select id into admin_role_id from roles where name = 'Admin' limit 1;
+  select id into design_role_id from roles where name = 'Design User' limit 1;
+
+  if admin_role_id is not null and design_role_id is not null and exists (
+    select 1 from information_schema.tables
+    where table_schema = 'auth' and table_name = 'users'
+  ) then
+    insert into app_users (id, username, password_hash, first_name, last_name, email, role_id, auth_user_id, status, last_login_at, created_at, updated_at)
+    select
+      au.id,
+      lower(coalesce(au.raw_user_meta_data ->> 'username', split_part(au.email, '@', 1))),
+      encode(digest('supabase-jwt-' || au.id::text, 'sha256'), 'hex'),
+      case
+        when lower(coalesce(au.raw_user_meta_data ->> 'username', split_part(au.email, '@', 1))) like '%admin%'
+          then 'Admin'
+        else 'Design'
+      end,
+      case
+        when lower(coalesce(au.raw_user_meta_data ->> 'username', split_part(au.email, '@', 1))) like '%admin%'
+          then 'Design'
+        else 'User'
+      end,
+      au.email,
+      case
+        when lower(coalesce(au.raw_user_meta_data ->> 'username', split_part(au.email, '@', 1))) like '%admin%'
+          then admin_role_id
+        else design_role_id
+      end,
+      au.id,
+      'Active',
+      now(),
+      now(),
+      now()
+    from auth.users au
+    where not exists (
+      select 1 from app_users ap where ap.auth_user_id = au.id or lower(coalesce(ap.email, '')) = lower(coalesce(au.email, ''))
+    )
+    on conflict (id) do update set
+      username = excluded.username,
+      email = excluded.email,
+      role_id = coalesce(app_users.role_id, excluded.role_id),
+      auth_user_id = excluded.auth_user_id,
+      status = 'Active',
+      last_login_at = now(),
+      updated_at = now();
+  end if;
+end $$;
+
 -- Demo Supabase Auth users for JWT login.
 -- Password for both seeded accounts remains: admin
 do $$

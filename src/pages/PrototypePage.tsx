@@ -235,7 +235,7 @@ export default function PrototypePage() {
         </div>
 
         <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
-          <button className="primary-btn" onClick={() => void handleSave()}>Save Configuration</button>
+          <button className="primary-btn" onClick={() => void handleSave()}>Generate</button>
           <button className="secondary-btn" onClick={() => setMessage('')}>Clear Message</button>
         </div>
 

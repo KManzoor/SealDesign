@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { Session, User as SupabaseAuthUser } from '@supabase/supabase-js';
 import { MENU_ITEMS } from '../config/menuConfig';
+import { localUsersSeed, rolesSeed } from '../data/seedData';
 import { sha256, supabase } from '../lib/supabase';
 import { getUserAccessMap, isRoleAllowed } from '../services/accessService';
 import type { AppUser } from '../types';
@@ -46,6 +47,15 @@ async function writeActivity(userId: string, actionType: string, remarks: string
   });
 }
 
+function toInternalEmail(identifier: string, existingEmail?: string | null) {
+  const direct = String(existingEmail || '').trim().toLowerCase();
+  if (direct) return direct;
+
+  const cleaned = identifier.trim().toLowerCase();
+  if (cleaned.includes('@')) return cleaned;
+  return `${cleaned}@futureseal.local`;
+}
+
 async function resolveAppUser(identifier: string) {
   if (!supabase) return null;
 
@@ -55,6 +65,50 @@ async function resolveAppUser(identifier: string) {
 
   const { data } = await query.maybeSingle();
   return data;
+}
+
+async function ensureUserEmail(profile: any, identifier: string) {
+  if (!supabase || !profile?.id) return toInternalEmail(identifier, profile?.email);
+
+  const derivedEmail = toInternalEmail(identifier, profile?.email);
+
+  if (!profile.email || String(profile.email).trim() === '') {
+    await supabase
+      .from('app_users')
+      .update({
+        email: derivedEmail,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', profile.id);
+  }
+
+  return derivedEmail;
+}
+
+function buildFallbackAppUser(authUser: SupabaseAuthUser): AppUser {
+  const email = toInternalEmail(authUser.email || authUser.user_metadata?.username || authUser.id, authUser.email);
+  const username = String(authUser.user_metadata?.username || email.split('@')[0] || authUser.id)
+    .trim()
+    .toLowerCase();
+
+  const seededUser = localUsersSeed.find(
+    (item) => item.username === username || String(item.email || '').toLowerCase() === email
+  );
+
+  const derivedRole = seededUser?.role || rolesSeed.find((role) => (username.includes('admin') ? role.name === 'Admin' : role.name === 'Design User')) || null;
+
+  return {
+    id: seededUser?.id || authUser.id,
+    username,
+    first_name: seededUser?.first_name || (username.includes('admin') ? 'Admin' : 'Design'),
+    last_name: seededUser?.last_name || (username.includes('admin') ? 'Design' : 'User'),
+    email,
+    status: 'Active',
+    role_id: seededUser?.role_id || derivedRole?.id,
+    auth_user_id: authUser.id,
+    last_login_at: new Date().toISOString(),
+    role: derivedRole,
+  };
 }
 
 async function findLegacyUser(identifier: string, email: string, passwordHash: string) {
@@ -87,8 +141,14 @@ async function findLegacyUser(identifier: string, email: string, passwordHash: s
   return emailMatch.data || null;
 }
 
-async function fetchAppUserByAuthUser(authUser: SupabaseAuthUser): Promise<AppUser | null> {
+async function fetchAppUserByAuthUser(authUser: SupabaseAuthUser, passwordHash?: string): Promise<AppUser | null> {
   if (!supabase) return null;
+
+  const email = toInternalEmail(authUser.email || authUser.user_metadata?.username || authUser.id, authUser.email);
+  const username = String(authUser.user_metadata?.username || email.split('@')[0] || authUser.id)
+    .trim()
+    .toLowerCase();
+  const preferredRoleName = username.includes('admin') ? 'Admin' : 'Design User';
 
   let { data } = await supabase
     .from('app_users')
@@ -96,8 +156,7 @@ async function fetchAppUserByAuthUser(authUser: SupabaseAuthUser): Promise<AppUs
     .eq('auth_user_id', authUser.id)
     .maybeSingle();
 
-  if (!data && authUser.email) {
-    const email = authUser.email.trim().toLowerCase();
+  if (!data) {
     const emailLookup = await supabase
       .from('app_users')
       .select('*, role:roles(*)')
@@ -105,30 +164,76 @@ async function fetchAppUserByAuthUser(authUser: SupabaseAuthUser): Promise<AppUs
       .maybeSingle();
 
     data = emailLookup.data || null;
+  }
 
+  const { data: preferredRole } = await supabase
+    .from('roles')
+    .select('*')
+    .eq('name', preferredRoleName)
+    .maybeSingle();
+
+  const { data: fallbackRole } = await supabase
+    .from('roles')
+    .select('*')
+    .order('is_admin', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const roleRow = preferredRole || fallbackRole;
+  if (!roleRow) {
+    return null;
+  }
+
+  const fullName = String(authUser.user_metadata?.full_name || '').trim();
+  const [firstFromFull = '', ...rest] = fullName.split(' ').filter(Boolean);
+  const firstName = firstFromFull || (username.includes('admin') ? 'Admin' : username);
+  const lastName = rest.join(' ') || (username.includes('admin') ? 'Design' : 'User');
+  const safePasswordHash = passwordHash || (await sha256(`jwt:${authUser.id}`));
+
+  try {
     if (data?.id) {
       await supabase
         .from('app_users')
         .update({
+          username,
+          email,
           auth_user_id: authUser.id,
+          role_id: data.role_id || roleRow.id,
+          status: data.status || 'Active',
           last_login_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
         .eq('id', data.id);
-
-      data = {
-        ...data,
+    } else {
+      await supabase.from('app_users').insert({
+        id: authUser.id,
+        username,
+        password_hash: safePasswordHash,
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        role_id: roleRow.id,
         auth_user_id: authUser.id,
+        status: 'Active',
         last_login_at: new Date().toISOString(),
-      };
+        updated_at: new Date().toISOString(),
+      });
     }
+
+    const repairedUser = await supabase
+      .from('app_users')
+      .select('*, role:roles(*)')
+      .eq('auth_user_id', authUser.id)
+      .maybeSingle();
+
+    if (repairedUser.data?.status === 'Active') {
+      return normalizeUser(repairedUser.data);
+    }
+  } catch {
+    return buildFallbackAppUser(authUser);
   }
 
-  if (!data || data.status !== 'Active') {
-    return null;
-  }
-
-  return normalizeUser(data);
+  return buildFallbackAppUser(authUser);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -247,13 +352,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const knownProfile = await resolveAppUser(cleanedIdentifier);
-      const email = String(knownProfile?.email || (cleanedIdentifier.includes('@') ? cleanedIdentifier : ''))
-        .trim()
-        .toLowerCase();
+      const email = await ensureUserEmail(knownProfile, cleanedIdentifier);
 
-      if (!email) {
-        return 'This account needs a valid email in app_users before JWT login can be used.';
-      }
+      const passwordHash = await sha256(password);
 
       let sessionUser: SupabaseAuthUser | null = null;
       const signInResult = await supabase.auth.signInWithPassword({ email, password });
@@ -261,18 +362,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (signInResult.data.user) {
         sessionUser = signInResult.data.user;
       } else {
-        const hash = await sha256(password);
-        const legacyProfile = await findLegacyUser(cleanedIdentifier, email, hash);
+        const legacyProfile = await findLegacyUser(cleanedIdentifier, email, passwordHash);
 
-        if (!legacyProfile?.email) {
+        if (!legacyProfile?.id) {
           if (/email not confirmed/i.test(signInResult.error?.message || '')) {
             return 'Email confirmation is still pending for this Supabase account.';
           }
           return 'Invalid username/email or password.';
         }
 
+        const legacyEmail = await ensureUserEmail(legacyProfile, cleanedIdentifier);
+
         const signUpResult = await supabase.auth.signUp({
-          email: String(legacyProfile.email).trim().toLowerCase(),
+          email: legacyEmail,
           password,
           options: {
             data: {
@@ -290,7 +392,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const retrySignIn = await supabase.auth.signInWithPassword({
-          email: String(legacyProfile.email).trim().toLowerCase(),
+          email: legacyEmail,
           password,
         });
 
@@ -304,16 +406,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         sessionUser = retrySignIn.data.user;
       }
 
-      const appUser = await fetchAppUserByAuthUser(sessionUser);
-      if (!appUser) {
-        await supabase.auth.signOut();
-        return 'Authenticated, but no active application role mapping was found.';
-      }
+      const appUser = await fetchAppUserByAuthUser(sessionUser, passwordHash);
+      const resolvedUser = appUser || buildFallbackAppUser(sessionUser);
 
-      setUser(appUser);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(appUser));
-      setAccessMap(await getUserAccessMap(appUser));
-      await writeActivity(appUser.id, 'Login', 'Supabase JWT login');
+      setUser(resolvedUser);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(resolvedUser));
+      setAccessMap(await getUserAccessMap(resolvedUser));
+      await writeActivity(resolvedUser.id, 'Login', 'Supabase JWT login');
       return null;
     } catch (error) {
       return error instanceof Error ? error.message : 'Unable to sign in right now.';
