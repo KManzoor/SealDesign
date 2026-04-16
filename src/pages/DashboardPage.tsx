@@ -33,9 +33,7 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <div className="banner info">
-        Data source status: {isSupabaseConfigured ? 'Supabase connected' : 'Local fallback mode'}
-      </div>
+     
       <div className="card-grid">
         <div className="summary-card"><h3>Seal Types</h3><p className="muted">{counts.sealTypes} records loaded</p></div>
         <div className="summary-card"><h3>MOC Master</h3><p className="muted">{counts.mocs} records loaded</p></div>
