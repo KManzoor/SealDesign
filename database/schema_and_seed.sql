@@ -16,10 +16,26 @@ create table if not exists app_users (
   last_name text not null,
   email text,
   role_id uuid references roles(id),
+  auth_user_id uuid unique,
   status text default 'Active',
+  last_login_at timestamptz,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+alter table app_users add column if not exists auth_user_id uuid;
+alter table app_users add column if not exists last_login_at timestamptz;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'app_users_auth_user_id_key'
+  ) then
+    alter table app_users add constraint app_users_auth_user_id_key unique (auth_user_id);
+  end if;
+end $$;
 
 create table if not exists user_access (
   id uuid primary key,
@@ -103,41 +119,6 @@ create table if not exists construction_master (
   remarks text
 );
 
-create table if not exists standard_component_master (
-  size_ref text primary key,
-  abutment_code text,
-  abutment_tapping text,
-  drive_collar_code text,
-  drive_tapping text
-);
-
-create table if not exists spring_master (
-  size_ref text primary key,
-  spring_dimension text,
-  spring_code text,
-  dor text,
-  moc_code text
-);
-
-create table if not exists sleeve_gland_gasket_master (
-  id uuid primary key default gen_random_uuid(),
-  gland_type text,
-  sleeve_code text,
-  gasket_code text,
-  pump_make text,
-  pump_model text,
-  moc_code text
-);
-
-create table if not exists pin_oring_master (
-  id uuid primary key default gen_random_uuid(),
-  pin_type text,
-  pin_code text,
-  bs_no text,
-  oring_id text,
-  cross_section text
-);
-
 create table if not exists bom_master (
   id uuid primary key default gen_random_uuid(),
   product_type text,
@@ -178,6 +159,126 @@ on conflict (username) do update set
   role_id = excluded.role_id,
   status = excluded.status,
   updated_at = now();
+
+-- Demo Supabase Auth users for JWT login.
+-- Password for both seeded accounts remains: admin
+do $$
+declare
+  admin_auth_id uuid := '30000000-0000-0000-0000-000000000001';
+  design_auth_id uuid := '30000000-0000-0000-0000-000000000002';
+begin
+  if exists (
+    select 1
+    from information_schema.tables
+    where table_schema = 'auth'
+      and table_name = 'users'
+  ) then
+    if not exists (select 1 from auth.users where email = 'admin_design@futureseal.local') then
+      insert into auth.users (
+        instance_id,
+        id,
+        aud,
+        role,
+        email,
+        encrypted_password,
+        email_confirmed_at,
+        raw_app_meta_data,
+        raw_user_meta_data,
+        created_at,
+        updated_at,
+        confirmation_token,
+        email_change,
+        email_change_token_new,
+        recovery_token
+      ) values (
+        '00000000-0000-0000-0000-000000000000',
+        admin_auth_id,
+        'authenticated',
+        'authenticated',
+        'admin_design@futureseal.local',
+        crypt('admin', gen_salt('bf')),
+        now(),
+        '{"provider":"email","providers":["email"]}',
+        '{"username":"admin_design"}',
+        now(),
+        now(),
+        '',
+        '',
+        '',
+        ''
+      );
+    end if;
+
+    begin
+      insert into auth.identities (provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+      values (
+        'admin_design@futureseal.local',
+        admin_auth_id,
+        format('{"sub":"%s","email":"%s"}', admin_auth_id, 'admin_design@futureseal.local')::jsonb,
+        'email',
+        now(),
+        now(),
+        now()
+      ) on conflict do nothing;
+    exception when others then
+      null;
+    end;
+
+    if not exists (select 1 from auth.users where email = 'design@futureseal.local') then
+      insert into auth.users (
+        instance_id,
+        id,
+        aud,
+        role,
+        email,
+        encrypted_password,
+        email_confirmed_at,
+        raw_app_meta_data,
+        raw_user_meta_data,
+        created_at,
+        updated_at,
+        confirmation_token,
+        email_change,
+        email_change_token_new,
+        recovery_token
+      ) values (
+        '00000000-0000-0000-0000-000000000000',
+        design_auth_id,
+        'authenticated',
+        'authenticated',
+        'design@futureseal.local',
+        crypt('admin', gen_salt('bf')),
+        now(),
+        '{"provider":"email","providers":["email"]}',
+        '{"username":"design"}',
+        now(),
+        now(),
+        '',
+        '',
+        '',
+        ''
+      );
+    end if;
+
+    begin
+      insert into auth.identities (provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+      values (
+        'design@futureseal.local',
+        design_auth_id,
+        format('{"sub":"%s","email":"%s"}', design_auth_id, 'design@futureseal.local')::jsonb,
+        'email',
+        now(),
+        now(),
+        now()
+      ) on conflict do nothing;
+    exception when others then
+      null;
+    end;
+  end if;
+end $$;
+
+update app_users set auth_user_id = '30000000-0000-0000-0000-000000000001' where username = 'admin_design';
+update app_users set auth_user_id = '30000000-0000-0000-0000-000000000002' where username = 'design';
 
 insert into user_access (id, user_id, screen_name, can_create, can_read, can_update, can_delete)
 select
@@ -239,28 +340,6 @@ insert into construction_master (construction_type, suffix_code, api_plan, api_c
 ('Cartridge', 'G', '11/62', 'G162', 'G added just after seal type for cartridge designs'),
 ('Non Cartridge', '', '0', 'G1', 'Base configuration without cartridge suffix')
 on conflict (construction_type) do nothing;
-
-insert into standard_component_master (size_ref, abutment_code, abutment_tapping, drive_collar_code, drive_tapping) values
-('25', 'FB0001-25', 'M5X3X120', 'FB0002-25', 'M5 X 6 X 60'),
-('30', 'FB0001-30', 'M5X3X120', 'FB0002-30', 'M5 X 6 X 60'),
-('35', 'FB0001-35', 'M5X3X120', 'FB0002-35', 'M5 X 6 X 60')
-on conflict (size_ref) do nothing;
-
-insert into spring_master (size_ref, spring_dimension, spring_code, dor, moc_code) values
-('25', '29 X 35 X 26 X 3 X 4 X RH', 'FB0034-29', 'R', 'S42'),
-('28/1.125', '33 X 39 X 27 X 3 X 3.5 X RH', 'FB0034-33', 'R', 'S42'),
-('35', '40 X 48 X 31.5 X 4 X 4', 'FB0034-40', 'R', 'S42')
-on conflict (size_ref) do nothing;
-
-insert into sleeve_gland_gasket_master (gland_type, sleeve_code, gasket_code, pump_make, pump_model, moc_code) values
-('GL-A1', 'SL-50-MCPK', 'GK-OD-ID-L', 'KSB', 'MCPK', 'S1'),
-('GL-B1', 'SL-50-UP', 'GK-OD-ID-L', 'KBL', 'UP', 'S1')
-on conflict do nothing;
-
-insert into pin_oring_master (pin_type, pin_code, bs_no, oring_id, cross_section) values
-('Square Pin Sleeve', 'FB0013-OD', '39000BSNO', 'ID-001', 'CS-001'),
-('Square Pin Gland', 'FB0014-OD', '39000BSNO', 'ID-002', 'CS-002')
-on conflict do nothing;
 
 insert into bom_master (product_type, item_no, component_name, drawing_pattern, qty) values
 ('Complete Seal', '1.0', 'Rotary Assembly', '39-SEALTYPE/SIZE-01', 1),

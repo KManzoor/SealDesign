@@ -5,14 +5,14 @@ import { useAuth } from '../context/AuthContext';
 export default function LoginPage() {
   const { login, loading } = useAuth();
   const navigate = useNavigate();
-  const [username, setUsername] = useState('admin_design');
+  const [identifier, setIdentifier] = useState('admin_design');
   const [password, setPassword] = useState('admin');
   const [error, setError] = useState('');
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError('');
-    const result = await login(username, password);
+    const result = await login(identifier, password);
     if (result) {
       setError(result);
       return;
@@ -24,12 +24,12 @@ export default function LoginPage() {
     <div className="login-wrap">
       <div className="login-card">
         <h1>Sign in</h1>
-        <p className="muted">This login follows the same username and password hash pattern used in the existing Supabase app.</p>
+        <p className="muted">This app now uses Supabase JWT sessions. You can sign in with your username or email.</p>
         {error ? <div className="banner error">{error}</div> : null}
         <form onSubmit={handleSubmit}>
           <div className="field">
-            <label>Username</label>
-            <input value={username} onChange={(e) => setUsername(e.target.value)} />
+            <label>Username or Email</label>
+            <input value={identifier} onChange={(e) => setIdentifier(e.target.value)} />
           </div>
           <div className="field">
             <label>Password</label>
@@ -40,7 +40,7 @@ export default function LoginPage() {
           </button>
         </form>
         <div className="banner info" style={{ marginTop: '14px' }}>
-          Demo users: admin_design and design. Default password is admin.
+          Existing users are linked to Supabase Auth automatically, or through the updated SQL seed for the demo accounts.
         </div>
       </div>
     </div>

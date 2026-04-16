@@ -14,17 +14,30 @@ import SealTypeMasterPage from '../pages/SealTypeMasterPage';
 import StationaryMasterPage from '../pages/StationaryMasterPage';
 import UserGuidePage from '../pages/UserGuidePage';
 
+function LoadingScreen() {
+  return (
+    <div style={{ padding: '24px' }}>
+      <div className="page-card">
+        <h2>Loading session...</h2>
+        <p className="muted">Refreshing access and authentication details.</p>
+      </div>
+    </div>
+  );
+}
+
 function PrivateRoute({ children }: { children: JSX.Element }) {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+  if (loading) return <LoadingScreen />;
   return user ? children : <Navigate to="/login" replace />;
 }
 
 function ScreenRoute({ screenName, children }: { screenName: string; children: JSX.Element }) {
-  const { canAccess, isAdmin } = useAuth();
+  const { canAccess, isAdmin, loading } = useAuth();
+  if (loading) return <LoadingScreen />;
   if (isAdmin() || canAccess(screenName)) {
     return children;
   }
-  return <Navigate to="/prototype" replace />;
+  return screenName === 'prototype' ? <Navigate to="/" replace /> : <Navigate to="/prototype" replace />;
 }
 
 function HomeRedirect() {

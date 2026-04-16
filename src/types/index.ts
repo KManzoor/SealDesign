@@ -14,6 +14,8 @@ export interface AppUser {
   status: string;
   password_hash?: string;
   role_id?: string;
+  auth_user_id?: string;
+  last_login_at?: string;
   role?: Role | null;
 }
 

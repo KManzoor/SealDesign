@@ -547,17 +547,18 @@
         <h3>7. Suggested Data Tables for Development</h3>
         <table>
           <tr><th>Table</th><th>Main Columns</th></tr>
-          <tr><td>seal_type_master</td><td>seal_type_code, description, balance_type, variant, active_flag</td></tr>
-          <tr><td>gp_classification_master</td><td>attribute_type, output_pattern, moc_code, moc_description</td></tr>
+          <tr><td>roles</td><td>id, name, is_admin, description</td></tr>
+          <tr><td>app_users</td><td>id, username, password_hash, email, role_id, auth_user_id, status</td></tr>
+          <tr><td>user_access</td><td>user_id, screen_name, can_create, can_read, can_update, can_delete</td></tr>
+          <tr><td>user_activities</td><td>user_id, screen_name, action_type, remarks, timestamp</td></tr>
+          <tr><td>seal_type_master</td><td>code, description, balance_type</td></tr>
+          <tr><td>moc_master</td><td>code, description</td></tr>
+          <tr><td>pump_model_master</td><td>pump_make, pump_model, pump_code</td></tr>
+          <tr><td>stationary_rule_master</td><td>stationary_name, default_api_plan, gland_code_0, gland_code_11, gland_code_1162</td></tr>
+          <tr><td>gp_classification_master</td><td>attribute_type, output_pattern, notes</td></tr>
           <tr><td>construction_master</td><td>construction_type, suffix_code, api_plan, api_code, remarks</td></tr>
-          <tr><td>stationary_api_gland_master</td><td>stationary_code, default_api_plan, api_plan_code, gland_code, active_flag</td></tr>
-          <tr><td>pump_model_master</td><td>pump_make, pump_model, gland_code</td></tr>
-          <tr><td>standard_component_master</td><td>size, abutment_code, abutment_tapping, drive_collar_code, drive_tapping</td></tr>
-          <tr><td>spring_master</td><td>size_ref, spring_dimension, spring_code, dor, moc_code</td></tr>
-          <tr><td>sleeve_gland_gasket_master</td><td>gland_type, sleeve_code, gasket_code, size, pump_model, moc_code</td></tr>
-          <tr><td>pin_oring_master</td><td>pin_type, pin_code, bs_no, oring_id, cross_section</td></tr>
           <tr><td>bom_master</td><td>product_type, item_no, component_name, drawing_pattern, qty</td></tr>
-          <tr><td>seal_configuration_txn</td><td>configuration_no, selected_masters, generated_attribute, created_by, created_on</td></tr>
+          <tr><td>seal_configuration_txn</td><td>configuration_no, generated_attribute, created_by, created_at</td></tr>
         </table>
       </section>
 
