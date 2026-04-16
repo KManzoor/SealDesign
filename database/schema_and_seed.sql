@@ -150,15 +150,46 @@ create table if not exists bom_master (
 insert into roles (id, name, is_admin, description) values
 ('00000000-0000-0000-0000-000000000001', 'Admin', true, 'Full access to all screens and menus'),
 ('00000000-0000-0000-0000-000000000002', 'Design User', false, 'Last screen prototype access only')
-on conflict (id) do nothing;
+on conflict (name) do update set
+  is_admin = excluded.is_admin,
+  description = excluded.description;
 
-insert into app_users (id, username, password_hash, first_name, last_name, email, role_id, status) values
-('10000000-0000-0000-0000-000000000001', 'admin_design', '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918', 'Admin', 'Design', 'admin_design@futureseal.local', '00000000-0000-0000-0000-000000000001', 'Active'),
-('10000000-0000-0000-0000-000000000002', 'design', '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918', 'Design', 'User', 'design@futureseal.local', '00000000-0000-0000-0000-000000000002', 'Active')
-on conflict (id) do nothing;
+insert into app_users (id, username, password_hash, first_name, last_name, email, role_id, status)
+select
+  v.id,
+  v.username,
+  v.password_hash,
+  v.first_name,
+  v.last_name,
+  v.email,
+  r.id,
+  v.status
+from (
+  values
+    ('10000000-0000-0000-0000-000000000001'::uuid, 'admin_design', '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918', 'Admin', 'Design', 'admin_design@futureseal.local', 'Admin', 'Active'),
+    ('10000000-0000-0000-0000-000000000002'::uuid, 'design', '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918', 'Design', 'User', 'design@futureseal.local', 'Design User', 'Active')
+) as v(id, username, password_hash, first_name, last_name, email, role_name, status)
+join roles r on r.name = v.role_name
+on conflict (username) do update set
+  password_hash = excluded.password_hash,
+  first_name = excluded.first_name,
+  last_name = excluded.last_name,
+  email = excluded.email,
+  role_id = excluded.role_id,
+  status = excluded.status,
+  updated_at = now();
 
-insert into user_access (id, user_id, screen_name, can_create, can_read, can_update, can_delete) values
-('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002', 'prototype', false, true, false, false)
+insert into user_access (id, user_id, screen_name, can_create, can_read, can_update, can_delete)
+select
+  '20000000-0000-0000-0000-000000000001'::uuid,
+  u.id,
+  'prototype',
+  false,
+  true,
+  false,
+  false
+from app_users u
+where u.username = 'design'
 on conflict (id) do nothing;
 
 insert into seal_type_master (code, description, balance_type) values

@@ -1,6 +1,6 @@
 import { mocOptions as seedMocOptions, pumpOptions as seedPumpOptions, sealTypes as seedSealTypes, stationaryRules as seedStationaryRules } from '../data/seedData';
 import { supabase } from '../lib/supabase';
-import type { ConstructionMaster, GpClassification, MocOption, PumpOption, SealConfigurationTxn, SealType, StationaryMasterRow } from '../types';
+import type { BomMasterItem, ConstructionMaster, GpClassification, MocOption, PumpOption, SealConfigurationTxn, SealType, StationaryMasterRow } from '../types';
 
 const STORAGE_KEYS = {
   sealTypes: 'sealdesign:seal-types',
@@ -9,6 +9,7 @@ const STORAGE_KEYS = {
   stationary: 'sealdesign:stationary-rules',
   gp: 'sealdesign:gp-classification',
   construction: 'sealdesign:construction-master',
+  bom: 'sealdesign:bom-master',
   configurations: 'sealdesign:configurations',
 };
 
@@ -56,6 +57,16 @@ function mapSeedConstruction(): ConstructionMaster[] {
   return [
     { construction_type: 'Non Cartridge', suffix_code: '', api_plan: '0', api_code: 'G1', remarks: 'Base construction' },
     { construction_type: 'Cartridge', suffix_code: 'G', api_plan: '11/62', api_code: 'G162', remarks: 'Cartridge construction with code after seal type' },
+  ];
+}
+
+function mapSeedBom(): BomMasterItem[] {
+  return [
+    { product_type: 'COMPLETE SEAL', item_no: '1.0', component_name: 'Rotary Assembly', drawing_pattern: '39-SEALTYPE/SIZE-01', qty: 1 },
+    { product_type: 'COMPLETE SEAL', item_no: '2.0', component_name: 'Pump Sleeve', drawing_pattern: 'SL/SLEEVE SIZE-PUMP+MOC', qty: 1 },
+    { product_type: 'COMPLETE SEAL', item_no: '6.0', component_name: 'Gland Plate Assembly', drawing_pattern: 'GL-GLAND TYPE/SIZE-PUMP+MOC', qty: 1 },
+    { product_type: 'COMPLETE SEAL WITHOUT GLAND PLATE', item_no: '1.0', component_name: 'Rotary Assembly', drawing_pattern: '39-SEALTYPE/SIZE-01', qty: 1 },
+    { product_type: 'COMPLETE SEAL WITHOUT GLAND PLATE AND WITHOUT SLEEVE', item_no: '4.0', component_name: 'Stationary', drawing_pattern: 'STATIONARY TYPE', qty: 1 },
   ];
 }
 
@@ -266,6 +277,17 @@ export async function deleteConstructionMaster(type: string) {
   const seed = mapSeedConstruction();
   const items = loadLocal(STORAGE_KEYS.construction, seed).filter((item) => item.construction_type !== type);
   saveLocal(STORAGE_KEYS.construction, items);
+}
+
+export async function listBomItems(): Promise<BomMasterItem[]> {
+  const seed = mapSeedBom();
+  if (supabase) {
+    const { data, error } = await supabase.from('bom_master').select('*').order('product_type').order('item_no');
+    if (!error && Array.isArray(data)) {
+      return data as BomMasterItem[];
+    }
+  }
+  return loadLocal(STORAGE_KEYS.bom, seed);
 }
 
 export async function listConfigurations(): Promise<SealConfigurationTxn[]> {

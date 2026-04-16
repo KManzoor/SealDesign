@@ -99,3 +99,12 @@ export interface ConstructionMaster {
   api_code: string;
   remarks: string;
 }
+
+export interface BomMasterItem {
+  id?: string;
+  product_type: string;
+  item_no: string;
+  component_name: string;
+  drawing_pattern: string;
+  qty: number;
+}

@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { apiCodes } from '../data/seedData';
-import { createConfiguration, listConstructionMasters, listGpClassifications, listMocOptions, listPumpOptions, listSealTypes, listStationaryRules } from '../services/masterDataService';
-import type { ConstructionMaster, GpClassification, MocOption, PumpOption, SealType, StationaryMasterRow } from '../types';
+import { createConfiguration, listBomItems, listConstructionMasters, listGpClassifications, listMocOptions, listPumpOptions, listSealTypes, listStationaryRules } from '../services/masterDataService';
+import type { BomMasterItem, ConstructionMaster, GpClassification, MocOption, PumpOption, SealType, StationaryMasterRow } from '../types';
 
 function toStationaryMap(items: StationaryMasterRow[]) {
   return Object.fromEntries(
@@ -27,6 +26,7 @@ export default function PrototypePage() {
   const { user } = useAuth();
   const [gpClassifications, setGpClassifications] = useState<GpClassification[]>([]);
   const [constructionOptions, setConstructionOptions] = useState<ConstructionMaster[]>([]);
+  const [bomItems, setBomItems] = useState<BomMasterItem[]>([]);
   const [sealTypes, setSealTypes] = useState<SealType[]>([]);
   const [mocOptions, setMocOptions] = useState<MocOption[]>([]);
   const [pumpOptions, setPumpOptions] = useState<PumpOption[]>([]);
@@ -48,12 +48,18 @@ export default function PrototypePage() {
   const pumpMakes = useMemo(() => [...new Set(pumpOptions.map((item) => item.make))], [pumpOptions]);
   const stationaries = useMemo(() => toStationaryMap(stationaryRows), [stationaryRows]);
   const models = useMemo(() => pumpOptions.filter((item) => item.make === pumpMake), [pumpOptions, pumpMake]);
+  const apiPlanOptions = useMemo(() => {
+    const fromConstruction = constructionOptions.map((item) => item.api_plan);
+    const fromStationary = stationaryRows.flatMap(() => ['0', '11', '11/62', '52', '53', '54']);
+    return [...new Set([...fromConstruction, ...fromStationary])];
+  }, [constructionOptions, stationaryRows]);
 
   useEffect(() => {
     async function load() {
-      const [gpRows, constructionRows, sealTypeRows, mocRows, pumpRows, stationaryRuleRows] = await Promise.all([
+      const [gpRows, constructionRows, bomRows, sealTypeRows, mocRows, pumpRows, stationaryRuleRows] = await Promise.all([
         listGpClassifications(),
         listConstructionMasters(),
+        listBomItems(),
         listSealTypes(),
         listMocOptions(),
         listPumpOptions(),
@@ -62,6 +68,7 @@ export default function PrototypePage() {
 
       setGpClassifications(gpRows);
       setConstructionOptions(constructionRows);
+      setBomItems(bomRows);
       setSealTypes(sealTypeRows);
       setMocOptions(mocRows);
       setPumpOptions(pumpRows);
@@ -92,21 +99,27 @@ export default function PrototypePage() {
     }
   }, [stationary, stationaries]);
 
-  const glandTypeCode = stationaries[stationary]?.glandCodes[apiPlan] || apiCodes[apiPlan] || 'G1';
+  const liveApiCodes = Object.fromEntries(constructionOptions.map((item) => [item.api_plan, item.api_code]));
+  const glandTypeCode = stationaries[stationary]?.glandCodes[apiPlan] || liveApiCodes[apiPlan] || 'G1';
   const pumpCode = pumpOptions.find((item) => item.make === pumpMake && item.model === pumpModel)?.pumpCode || '';
 
   useEffect(() => {
     let nextCode = '';
-    let nextBom: string[] = [];
 
     if (attributeType === 'COMPLETE SEAL') {
       nextCode = `39-${sealType}/${sealSize}-${glandTypeCode}${pumpCode}${mocCode}`;
-      nextBom = ['Rotary Assembly', 'Pump Sleeve', 'Gasket', 'Stationary', 'O-Ring', 'Gland Plate Assembly', 'Gland Plate', 'Cyl Pin'];
     } else if (attributeType === 'COMPLETE SEAL WITHOUT GLAND PLATE') {
       nextCode = `39-${sealType}/${sealSize}-${pumpCode}${mocCode}`;
-      nextBom = ['Rotary Assembly', 'Pump Sleeve', 'Gasket', 'Stationary', 'O-Ring'];
     } else {
       nextCode = `39-${sealType}/${sealSize}-${stationary}${mocCode}`;
+    }
+
+    let nextBom = bomItems
+      .filter((item) => item.product_type.toUpperCase() === attributeType.toUpperCase())
+      .sort((a, b) => a.item_no.localeCompare(b.item_no))
+      .map((item) => item.component_name);
+
+    if (nextBom.length === 0) {
       nextBom = ['Rotary Assembly', 'Stationary', 'O-Ring'];
     }
 
@@ -119,7 +132,7 @@ export default function PrototypePage() {
     setUsedValues(
       `Stationary: ${stationary} | API Plan: ${apiPlan} | Gland Type Code: ${glandTypeCode} | Pump: ${pumpMake} / ${pumpModel} | Pump Model Code: ${pumpCode} | MOC: ${mocCode}`
     );
-  }, [attributeType, sealType, sealSize, construction, stationary, apiPlan, pumpMake, pumpModel, mocCode, glandTypeCode, pumpCode]);
+  }, [attributeType, sealType, sealSize, construction, stationary, apiPlan, pumpMake, pumpModel, mocCode, glandTypeCode, pumpCode, bomItems]);
 
   async function handleSave() {
     if (!resultCode) return;
@@ -183,7 +196,7 @@ export default function PrototypePage() {
           <div className="field">
             <label>API Plan</label>
             <select value={apiPlan} onChange={(e) => setApiPlan(e.target.value)}>
-              {Object.keys(apiCodes).map((item) => <option key={item}>{item}</option>)}
+              {apiPlanOptions.map((item) => <option key={item}>{item}</option>)}
             </select>
           </div>
           <div className="field">
